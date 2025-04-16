@@ -71,11 +71,40 @@ feel the energy flowing through you... You're waking up exactly when you need to
 Everything is aligning perfectly for your day... Let's greet this wonderful morning together...
 with hope in our hearts... and dreams in our minds..."""
 
+# --- ElevenLabs Configuration ---
+VOICE_START_DELAY_MS = 3000  # Delay in milliseconds before voice starts
+DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
+DEFAULT_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
+DEFAULT_VOICE_SETTINGS = {
+    "stability": 0.50,
+    "similarity_boost": 0.95,
+    "style": 0.5,
+    "use_speaker_boost": True,
+    "speed": 0.9,  # Default speed
+}
+
 ELEVENLABS_VOICES = [
     {
         "id": "FA6HhUjVbervLw2rNl8M",
         "name": "Ophelia Rose",
         "description": "British Female, Soothing & Calm",
+        "preview_file": "static/voices/FA6HhUjVbervLw2rNl8M.mp3",
+        "voice_settings": DEFAULT_VOICE_SETTINGS,
     },
-    # Add more voices here in the future
+    # Add more voices here in the future, ensuring preview files exist
+    # Example for a future voice with custom settings:
+    # {
+    #     "id": "ANOTHER_VOICE_ID",
+    #     "name": "Future Voice",
+    #     "description": "Another description",
+    #     "preview_file": "static/voices/ANOTHER_VOICE_ID.mp3",
+    #     "voice_settings": {
+    #         "stability": 0.60, # Custom setting
+    #         "similarity_boost": 0.90,
+    #         "style": 0.3,
+    #         "use_speaker_boost": False,
+    #         "speed": 1.0,
+    #     }
+    # },
 ]
+# Ensure the 'static/voices/' directory exists and contains the preview MP3s named by ID.
