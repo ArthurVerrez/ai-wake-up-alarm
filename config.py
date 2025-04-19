@@ -75,7 +75,7 @@ with hope in our hearts... and dreams in our minds..."""
 DEFAULT_SFX_LEVEL = 75  # Default volume percentage (0-100)
 
 # --- Music Configuration ---
-DEFAULT_MUSIC_LEVEL = 80  # Default volume percentage (0-100)
+DEFAULT_MUSIC_LEVEL = 65  # Default volume percentage (0-100)
 
 # --- ElevenLabs Configuration ---
 DEFAULT_VOICE_LEVEL = 100  # Default volume percentage (0-100)
