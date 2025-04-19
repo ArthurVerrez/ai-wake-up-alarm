@@ -7,7 +7,7 @@ def metadata():
     st.set_page_config(
         page_title=PAGE_TITLE,
         page_icon=PAGE_ICON,
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
     try:
         with open("./static/style.css") as f:

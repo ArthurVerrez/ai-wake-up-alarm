@@ -27,9 +27,12 @@ def merge_audio(
     sfx_levels: dict[str, int],
     music_level: int,
     loop_sfx: bool = True,
+    target_duration_ms: int | None = None,
 ) -> str | None:
     """
-    Merges sound effects onto a base music track, applying specified volume levels.
+    Merges music and sound effects, adjusting levels and duration.
+    If target_duration_ms is provided, loops/truncates music and SFX to match it.
+    Otherwise, uses the original music duration.
 
     Args:
         music_path: Path to the background music file.
@@ -37,6 +40,8 @@ def merge_audio(
         sfx_levels: Dictionary mapping SFX path to its volume level (0-100).
         music_level: Volume level for the music track (0-100).
         loop_sfx: If True, loop shorter sound effects.
+        target_duration_ms: The desired final duration in milliseconds. If None,
+                            uses the original music duration.
 
     Returns:
         Path to the temporary merged audio file, or None if an error occurs.
@@ -44,31 +49,61 @@ def merge_audio(
     try:
         logging.info(f"Loading music track: {music_path}")
         music = AudioSegment.from_mp3(music_path)
+        music_original_duration_ms = len(music)
 
-        # --- Apply Music Level ---
+        # Determine the reference duration for processing
+        if target_duration_ms is None:
+            reference_duration_ms = music_original_duration_ms
+            logging.info(
+                f"Using original music duration as reference: {reference_duration_ms / 1000:.2f}s"
+            )
+        else:
+            reference_duration_ms = target_duration_ms
+            logging.info(
+                f"Using target duration as reference: {reference_duration_ms / 1000:.2f}s"
+            )
+
+        # Apply Music Level
         music_db_adjustment = level_to_db(music_level)
         logging.info(
             f"Adjusting music volume by {music_db_adjustment:.2f} dB (Level: {music_level})"
         )
         adjusted_music = music + music_db_adjustment
-        # -----------------------
 
-        output_audio = adjusted_music  # Start with adjusted music
-        music_duration_ms = len(output_audio)
-        logging.info(f"Adjusted music duration: {music_duration_ms / 1000:.2f} seconds")
+        # --- Adjust Music Duration ---
+        if len(adjusted_music) == 0:
+            logging.warning("Adjusted music has zero duration. Skipping music track.")
+            # Start with silence if music is empty
+            output_audio = AudioSegment.silent(duration=reference_duration_ms)
+        elif len(adjusted_music) < reference_duration_ms:
+            logging.info(
+                f"Looping music to match reference duration ({reference_duration_ms / 1000:.2f}s)."
+            )
+            num_repeats = math.ceil(reference_duration_ms / len(adjusted_music))
+            output_audio = (adjusted_music * num_repeats)[:reference_duration_ms]
+        elif len(adjusted_music) > reference_duration_ms:
+            logging.info(
+                f"Truncating music to match reference duration ({reference_duration_ms / 1000:.2f}s)."
+            )
+            output_audio = adjusted_music[:reference_duration_ms]
+        else:
+            output_audio = adjusted_music  # Duration matches
+        # ---------------------------
 
+        logging.info(
+            f"Base audio initialized with duration: {len(output_audio) / 1000:.2f}s"
+        )
+
+        # Process and overlay SFX
         for sfx_path in sfx_paths:
             try:
                 logging.info(f"Loading sound effect: {sfx_path}")
                 sfx = AudioSegment.from_mp3(sfx_path)
-                sfx_duration_ms = len(sfx)
-                logging.info(f"SFX duration: {sfx_duration_ms / 1000:.2f} seconds")
-
-                if sfx_duration_ms == 0:
-                    logging.warning(f"Skipping zero-duration SFX: {sfx_path}")
+                sfx_original_duration_ms = len(sfx)
+                if sfx_original_duration_ms == 0:
                     continue
 
-                # Apply SFX Volume Level
+                # Apply SFX Level
                 level = sfx_levels.get(sfx_path, config.DEFAULT_SFX_LEVEL)
                 db_adjustment = level_to_db(level)
                 logging.info(
@@ -76,55 +111,63 @@ def merge_audio(
                 )
                 sfx_adjusted = sfx + db_adjustment
                 sfx_to_process = sfx_adjusted
-                sfx_duration_ms = len(sfx_to_process)
+                sfx_current_duration_ms = len(sfx_to_process)
 
+                # Adjust SFX Duration (loop/truncate to reference_duration_ms)
                 sfx_to_overlay: AudioSegment
-                if sfx_duration_ms < music_duration_ms:
+                if sfx_current_duration_ms < reference_duration_ms:
                     if loop_sfx:
-                        num_repeats = math.ceil(music_duration_ms / sfx_duration_ms)
+                        num_repeats = math.ceil(
+                            reference_duration_ms / sfx_current_duration_ms
+                        )
                         logging.info(
-                            f"Looping adjusted SFX {sfx_path} {num_repeats} times."
+                            f"Looping adjusted SFX {sfx_path} to reference duration ({reference_duration_ms/1000:.2f}s). Repeats: {num_repeats}"
                         )
                         looped_sfx = sfx_to_process * num_repeats
-                        sfx_to_overlay = looped_sfx[:music_duration_ms]
+                        sfx_to_overlay = looped_sfx[:reference_duration_ms]
                     else:
                         logging.info(
                             f"Using short adjusted SFX {sfx_path} without looping."
                         )
-                        sfx_to_overlay = sfx_to_process
-                elif sfx_duration_ms > music_duration_ms:
+                        sfx_to_overlay = (
+                            sfx_to_process  # Will be overlaid only once at the start
+                        )
+                elif sfx_current_duration_ms > reference_duration_ms:
                     logging.warning(
-                        f"Truncating adjusted SFX {sfx_path} to music duration."
+                        f"Truncating adjusted SFX {sfx_path} to reference duration ({reference_duration_ms/1000:.2f}s)."
                     )
-                    sfx_to_overlay = sfx_to_process[:music_duration_ms]
+                    sfx_to_overlay = sfx_to_process[:reference_duration_ms]
                 else:
                     sfx_to_overlay = sfx_to_process
 
-                logging.info(f"Overlaying adjusted SFX: {sfx_path}")
+                # Overlay onto output audio
+                logging.info(f"Overlaying processed SFX: {sfx_path}")
                 if sfx_to_overlay:
                     output_audio = output_audio.overlay(sfx_to_overlay, position=0)
                 else:
                     logging.warning(
-                        f"Adjusted SFX to overlay for {sfx_path} was unexpectedly None."
+                        f"SFX to overlay for {sfx_path} was unexpectedly None."
                     )
 
             except Exception as e:
                 logging.error(f"Error processing sound effect {sfx_path}: {e}")
                 continue
 
-        # Export the merged audio to a temporary file
+        # Export the final merged background audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
             output_filename = tmp_file.name
-            logging.info(f"Exporting merged music/sfx audio to: {output_filename}")
+            logging.info(
+                f"Exporting merged background audio (duration: {len(output_audio)/1000:.2f}s) to: {output_filename}"
+            )
             output_audio.export(output_filename, format="mp3")
-            logging.info("Music/SFX merge export complete.")
+            logging.info("Background merge export complete.")
             return output_filename
 
     except FileNotFoundError as e:
         logging.error(f"Music file not found in merge_audio: {e}")
         return None
     except Exception as e:
-        logging.error(f"An error occurred during music/sfx merging: {e}")
+        logging.error(f"An error occurred during background merging: {e}")
         return None
 
 

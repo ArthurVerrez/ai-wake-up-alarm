@@ -4,6 +4,7 @@ from utils.audio_processing import merge_audio, overlay_voice
 from utils.text_generation import generate_wake_up_message, expand_wake_up_message
 from utils.tts_generation import generate_tts_audio
 import os
+from pydub import AudioSegment
 
 
 def body():
@@ -258,9 +259,8 @@ def body():
         selected_voice_id = st.session_state.get("selected_voice_id")
         voice_level = st.session_state.get("voice_level", config.DEFAULT_VOICE_LEVEL)
         music_level = st.session_state.get("music_level", config.DEFAULT_MUSIC_LEVEL)
-        # selected_music_name is already defined above
-        # selected_sfx_names is already defined above
-        # Get current levels from session state
+        selected_music_name = st.session_state.get("music_select")
+        selected_sfx_names = st.session_state.get("sfx_multi", [])
         current_sfx_levels_names = st.session_state.get("sfx_levels", {})
 
         # --- Validation ---
@@ -275,6 +275,7 @@ def body():
             temp_files_to_clean = []
             final_alarm_path = None
             error_occurred = False
+            target_duration = None
 
             # Map SFX names/levels to paths/levels for the processing function
             sfx_levels_paths = {
@@ -289,6 +290,7 @@ def body():
 
             try:
                 # 1. Generate TTS
+                generated_tts_path = None
                 with st.spinner("Generating voice audio..."):
                     voice_details = next(
                         (
@@ -307,23 +309,42 @@ def body():
                     )
                     if generated_tts_path:
                         temp_files_to_clean.append(generated_tts_path)
-                        st.success("Voice audio generated.")
+                        # --- Get TTS Duration ---
+                        try:
+                            tts_segment = AudioSegment.from_mp3(generated_tts_path)
+                            target_duration = len(tts_segment)
+                            st.success(
+                                f"Voice audio generated (Duration: {target_duration / 1000:.2f}s)."
+                            )
+                        except Exception as e_dur:
+                            st.error(
+                                f"Generated voice audio, but failed to get duration: {e_dur}"
+                            )
+                            error_occurred = (
+                                True  # Treat as error if we can't get duration
+                            )
+                        # ------------------------
                     else:
                         st.error("Failed to generate voice audio.")
                         error_occurred = True
 
-                # 2. Merge Music and SFX (using selected paths and levels)
+                # 2. Merge Music and SFX (using target_duration)
                 merged_music_sfx_path = None
-                if not error_occurred:
-                    with st.spinner("Mixing background music and sound effects..."):
+                if (
+                    not error_occurred and target_duration is not None
+                ):  # Check if target_duration was set
+                    with st.spinner(
+                        f"Mixing background music and sound effects to match voice duration ({target_duration / 1000:.2f}s)..."
+                    ):
                         music_path = config.DEFAULT_MUSIC[selected_music_name]
-                        # Pass the selected paths and their levels
+                        # Pass target_duration to merge_audio
                         merged_music_sfx_path = merge_audio(
                             music_path,
                             sfx_paths_selected,
                             sfx_levels_paths,
                             music_level,
                             loop_sfx=True,
+                            target_duration_ms=target_duration,
                         )
                         if merged_music_sfx_path:
                             temp_files_to_clean.append(merged_music_sfx_path)
@@ -331,6 +352,11 @@ def body():
                         else:
                             st.error("Failed to mix background audio.")
                             error_occurred = True
+                elif not error_occurred and target_duration is None:
+                    st.error(
+                        "Skipping background mix because voice duration could not be determined."
+                    )
+                    error_occurred = True  # Cannot proceed without target duration
 
                 # 3. Overlay Voice onto Merged Background (only if both above succeeded)
                 if not error_occurred and generated_tts_path and merged_music_sfx_path:
