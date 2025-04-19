@@ -71,7 +71,14 @@ feel the energy flowing through you... You're waking up exactly when you need to
 Everything is aligning perfectly for your day... Let's greet this wonderful morning together...
 with hope in our hearts... and dreams in our minds..."""
 
+# --- Sound Effect Configuration ---
+DEFAULT_SFX_LEVEL = 75  # Default volume percentage (0-100)
+
+# --- Music Configuration ---
+DEFAULT_MUSIC_LEVEL = 80  # Default volume percentage (0-100)
+
 # --- ElevenLabs Configuration ---
+DEFAULT_VOICE_LEVEL = 100  # Default volume percentage (0-100)
 VOICE_START_DELAY_MS = 3000  # Delay in milliseconds before voice starts
 DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
 DEFAULT_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
@@ -85,10 +92,19 @@ DEFAULT_VOICE_SETTINGS = {
 
 ELEVENLABS_VOICES = [
     {
+        # https://elevenlabs.io/app/voice-lab?voiceId=FA6HhUjVbervLw2rNl8M
         "id": "FA6HhUjVbervLw2rNl8M",
         "name": "Ophelia Rose",
         "description": "British Female, Soothing & Calm",
         "preview_file": "static/voices/FA6HhUjVbervLw2rNl8M.mp3",
+        "voice_settings": DEFAULT_VOICE_SETTINGS,
+    },
+    {
+        # https://elevenlabs.io/app/voice-lab?voiceId=FA6HhUjVbervLw2rNl8M
+        "id": "KmnvDXRA0HU55Q0aqkPG",
+        "name": "Australian Baritone",
+        "description": "Soft, Slow & Calming",
+        "preview_file": "static/voices/KmnvDXRA0HU55Q0aqkPG.mp3",
         "voice_settings": DEFAULT_VOICE_SETTINGS,
     },
     # Add more voices here in the future, ensuring preview files exist

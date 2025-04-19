@@ -10,14 +10,18 @@ def body():
     """Displays the main body content with selection forms and generation."""
 
     # Initialize session state
-    if "generated_wake_up_text" not in st.session_state:
-        st.session_state["generated_wake_up_text"] = config.DEFAULT_WAKE_UP_SCRIPT
-    # Initialize selected voice ID if it doesn't exist (using the first voice as default)
-    if "selected_voice_id" not in st.session_state:
-        if config.ELEVENLABS_VOICES:
-            st.session_state["selected_voice_id"] = config.ELEVENLABS_VOICES[0]["id"]
-        else:
-            st.session_state["selected_voice_id"] = None  # Handle case with no voices
+    st.session_state.setdefault("generated_wake_up_text", config.DEFAULT_WAKE_UP_SCRIPT)
+    st.session_state.setdefault(
+        "selected_voice_id",
+        config.ELEVENLABS_VOICES[0]["id"] if config.ELEVENLABS_VOICES else None,
+    )
+    st.session_state.setdefault("sfx_levels", {})
+    st.session_state.setdefault(
+        "voice_level", config.DEFAULT_VOICE_LEVEL
+    )  # Add voice level state
+    st.session_state.setdefault(
+        "music_level", config.DEFAULT_MUSIC_LEVEL
+    )  # Add music level state
 
     st.header("1. Create Your Wake-Up Message")
 
@@ -49,6 +53,10 @@ def body():
         height=150,
         key="wake_up_script",
     )
+
+    # --- Add Character Count ---
+    st.caption(f"Character count: {len(st.session_state['generated_wake_up_text'])}")
+    # -------------------------
 
     st.divider()
 
@@ -162,15 +170,74 @@ def body():
 
     st.divider()
 
-    st.header("5. Generate Your Final Alarm")  # Renumbered
+    # --- Step 5: Adjust Audio Levels (Optional) ---
+    st.header("5. Adjust Levels (Optional)")
+
+    with st.expander("Fine-tune Volume Levels"):
+        # --- Voice Level Slider ---
+        st.write("Adjust the master volume level (0-100) for the generated voice:")
+        st.session_state["voice_level"] = st.slider(
+            label="Voice Volume Level",
+            min_value=0,
+            max_value=100,
+            value=st.session_state["voice_level"],
+            key="voice_level_slider_moved",
+        )
+        st.markdown("---")  # Separator
+        # -------------------------
+
+        # --- Music Level Slider ---
+        st.write("Adjust the master volume level (0-100) for the background music:")
+        st.session_state["music_level"] = st.slider(
+            label="Music Volume Level",
+            min_value=0,
+            max_value=100,
+            value=st.session_state["music_level"],
+            key="music_level_slider_moved",
+        )
+        st.markdown("---")  # Separator
+        # -----------------------------
+
+        # --- SFX Level Sliders ---
+        st.write("Adjust the volume level (0-100) for each selected sound effect:")
+        if selected_sfx_names:  # Use variable from Step 4
+            current_sfx_levels = st.session_state.setdefault("sfx_levels", {})
+            updated_levels = {}
+            for sfx_name in selected_sfx_names:
+                level = st.slider(
+                    f"Level for **{sfx_name}**",
+                    0,
+                    100,
+                    current_sfx_levels.get(sfx_name, config.DEFAULT_SFX_LEVEL),
+                    key=f"level_slider_{sfx_name}",
+                )
+                updated_levels[sfx_name] = level
+            st.session_state["sfx_levels"] = updated_levels
+            # Cleanup removed SFX levels
+            sfx_names_to_remove = [
+                name for name in current_sfx_levels if name not in selected_sfx_names
+            ]
+            for name in sfx_names_to_remove:
+                del st.session_state["sfx_levels"][name]
+        else:
+            st.caption("(No sound effects currently selected in Step 4)")
+        # -------------------------
+
+    st.divider()
+
+    st.header("6. Generate Your Final Alarm")  # Renumbered
     if st.button("Generate Alarm Sound", key="generate_button"):
-        # Get selections
+        # Get selections including new levels
         final_script = st.session_state.get(
             "generated_wake_up_text", config.DEFAULT_WAKE_UP_SCRIPT
         )
         selected_voice_id = st.session_state.get("selected_voice_id")
+        voice_level = st.session_state.get("voice_level", config.DEFAULT_VOICE_LEVEL)
+        music_level = st.session_state.get("music_level", config.DEFAULT_MUSIC_LEVEL)
         # selected_music_name is already defined above
         # selected_sfx_names is already defined above
+        # Get current levels from session state
+        current_sfx_levels_names = st.session_state.get("sfx_levels", {})
 
         # --- Validation ---
         if not final_script:
@@ -184,6 +251,17 @@ def body():
             temp_files_to_clean = []
             final_alarm_path = None
             error_occurred = False
+
+            # Map SFX names/levels to paths/levels for the processing function
+            sfx_levels_paths = {
+                config.DEFAULT_SOUND_EFFECTS[name]: current_sfx_levels_names.get(
+                    name, config.DEFAULT_SFX_LEVEL
+                )
+                for name in selected_sfx_names  # Iterate through *selected* names only
+            }
+            sfx_paths_selected = [
+                config.DEFAULT_SOUND_EFFECTS[name] for name in selected_sfx_names
+            ]
 
             try:
                 # 1. Generate TTS
@@ -210,17 +288,18 @@ def body():
                         st.error("Failed to generate voice audio.")
                         error_occurred = True
 
-                # 2. Merge Music and SFX (only if TTS succeeded)
+                # 2. Merge Music and SFX (using selected paths and levels)
                 merged_music_sfx_path = None
                 if not error_occurred:
                     with st.spinner("Mixing background music and sound effects..."):
                         music_path = config.DEFAULT_MUSIC[selected_music_name]
-                        sfx_paths = [
-                            config.DEFAULT_SOUND_EFFECTS[name]
-                            for name in selected_sfx_names
-                        ]
+                        # Pass the selected paths and their levels
                         merged_music_sfx_path = merge_audio(
-                            music_path, sfx_paths, loop_sfx=True
+                            music_path,
+                            sfx_paths_selected,
+                            sfx_levels_paths,
+                            music_level,
+                            loop_sfx=True,
                         )
                         if merged_music_sfx_path:
                             temp_files_to_clean.append(merged_music_sfx_path)
@@ -233,7 +312,7 @@ def body():
                 if not error_occurred and generated_tts_path and merged_music_sfx_path:
                     with st.spinner("Overlaying voice onto background..."):
                         final_alarm_path = overlay_voice(
-                            merged_music_sfx_path, generated_tts_path
+                            merged_music_sfx_path, generated_tts_path, voice_level
                         )
                         if final_alarm_path:
                             temp_files_to_clean.append(final_alarm_path)
