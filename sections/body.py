@@ -1,7 +1,7 @@
 import streamlit as st
 import config
 from utils.audio_processing import merge_audio, overlay_voice
-from utils.text_generation import generate_wake_up_message
+from utils.text_generation import generate_wake_up_message, expand_wake_up_message
 from utils.tts_generation import generate_tts_audio
 import os
 
@@ -23,41 +23,65 @@ def body():
         "music_level", config.DEFAULT_MUSIC_LEVEL
     )  # Add music level state
 
+    # --- Step 1: Create Message ---
     st.header("1. Create Your Wake-Up Message")
-
-    # Change text_area to text_input for user description
     user_description = st.text_input(
-        "Describe yourself (e.g., name, location, job, hobbies):",
+        "Describe yourself...",
         key="user_desc",
-        placeholder="Example: My name is Alex, I live in London and work as a writer.",
-        help="Provide details for a personalized message.",
+        placeholder="Example: My name is Alex...",
+        help="...",
     )
 
-    if st.button("✨ Auto-generate Script", key="generate_text_button"):
-        if user_description:
-            with st.spinner("Generating your personalized script..."):
-                generated_text = generate_wake_up_message(user_description)
-                if generated_text and not generated_text.startswith("Error:"):
-                    st.session_state["generated_wake_up_text"] = generated_text
-                elif generated_text:
-                    st.error(generated_text)
-                else:
-                    st.error("Failed to generate script. Unknown error.")
-        else:
-            st.warning("Please enter a description first.")
+    # --- Buttons Side-by-Side ---
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(
+            "✨ Auto-generate Script",
+            key="generate_text_button",
+            use_container_width=True,
+        ):
+            if user_description:
+                with st.spinner("Generating script..."):
+                    generated_text = generate_wake_up_message(user_description)
+                    if generated_text and not generated_text.startswith("Error:"):
+                        st.session_state["generated_wake_up_text"] = generated_text
+                    elif generated_text:
+                        st.error(generated_text)
+                    else:
+                        st.error("Failed to generate script. Unknown error.")
+            else:
+                st.warning("Please enter a description first to generate a new script.")
 
-    # Text area to display/edit the generated script (initial value is now the default)
+    with col2:
+        if st.button(
+            "↔️ Expand Script", key="expand_text_button", use_container_width=True
+        ):
+            current_script = st.session_state.get("generated_wake_up_text", "")
+            if current_script:
+                with st.spinner("Expanding script..."):
+                    expanded_text = expand_wake_up_message(current_script)
+                    if expanded_text and not expanded_text.startswith("Error:"):
+                        st.session_state["generated_wake_up_text"] = expanded_text
+                    elif expanded_text:
+                        st.error(expanded_text)
+                    else:
+                        st.error("Failed to expand script. Unknown error.")
+            else:
+                st.warning("There is no script in the text box to expand.")
+    # -------------------------
+
+    # Update current_script variable after potential button clicks
+    current_script = st.session_state.get(
+        "generated_wake_up_text", config.DEFAULT_WAKE_UP_SCRIPT
+    )
+
     st.session_state["generated_wake_up_text"] = st.text_area(
         "Your wake-up script (edit if needed):",
-        value=st.session_state["generated_wake_up_text"],
+        value=current_script,
         height=150,
         key="wake_up_script",
     )
-
-    # --- Add Character Count ---
     st.caption(f"Character count: {len(st.session_state['generated_wake_up_text'])}")
-    # -------------------------
-
     st.divider()
 
     # --- NEW SECTION: Voice Selection ---

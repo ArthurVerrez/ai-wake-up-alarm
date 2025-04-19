@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 import config
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # Load environment variables (for API keys)
 load_dotenv()
@@ -19,7 +21,8 @@ try:
     logging.info("OpenAI client initialized successfully.")
 except Exception as e:
     logging.error(f"Failed to initialize OpenAI client: {e}")
-    client = None # Set client to None if initialization fails
+    client = None  # Set client to None if initialization fails
+
 
 def generate_wake_up_message(user_description: str) -> str | None:
     """
@@ -58,19 +61,83 @@ def generate_wake_up_message(user_description: str) -> str | None:
     """
 
     try:
-        logging.info(f"Generating wake-up message for description: {user_description[:50]}...")
+        logging.info(
+            f"Generating wake-up message for description: {user_description[:50]}..."
+        )
         response = client.chat.completions.create(
             model=config.OPENAI_MODEL_ID,
             messages=[
-                {"role": "system", "content": "You are a kind assistant creating gentle wake-up message scripts."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are a kind assistant creating gentle wake-up message scripts.",
+                },
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.7, # Adjust for creativity vs. predictability
-            max_tokens=150 # Limit response length
+            temperature=0.7,  # Adjust for creativity vs. predictability
+            max_tokens=500,  # Limit response length
         )
         generated_text = response.choices[0].message.content.strip()
         logging.info(f"Generated text: {generated_text}")
         return generated_text
     except Exception as e:
         logging.error(f"Error calling OpenAI API: {e}")
-        return f"Error generating text: {e}" 
+        return f"Error generating text: {e}"
+
+
+def expand_wake_up_message(current_script: str) -> str | None:
+    """
+    Expands an existing wake-up message script using OpenAI, making it longer.
+
+    Args:
+        current_script: The existing wake-up script text.
+
+    Returns:
+        The expanded wake-up message string, or None if an error occurs.
+    """
+    if not client:
+        logging.error("OpenAI client not available. Cannot expand text.")
+        return "Error: OpenAI client not configured. Check API key and logs."
+
+    if not current_script:
+        return "There is no script to expand."
+
+    prompt = f"""
+    Take the following gentle, slow, and soothing wake-up message script 
+    and make it approximately twice as long. 
+    
+    Maintain the existing gentle, slow pace, and soothing tone. 
+    Use plenty of ellipses (...) for pauses. Keep sentences relatively short and calm.
+    Add more encouraging words, gentle observations about the morning, 
+    or soft prompts to wake up, weaving them naturally into the existing text.
+    Do not drastically change the core message or style.
+    
+    Existing Script:
+    --- --- ---
+    {current_script}
+    --- --- ---
+    
+    Expanded Script:
+    """
+
+    try:
+        logging.info(
+            f"Expanding wake-up message script starting with: {current_script[:50]}..."
+        )
+        response = client.chat.completions.create(
+            model=config.OPENAI_MODEL_ID,  # Use the same model for consistency
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a kind assistant expanding gentle wake-up message scripts.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.6,  # Slightly lower temp might be better for expansion
+            max_tokens=500,  # Allow for a longer response
+        )
+        expanded_text = response.choices[0].message.content.strip()
+        logging.info(f"Expanded text: {expanded_text}")
+        return expanded_text
+    except Exception as e:
+        logging.error(f"Error calling OpenAI API for expansion: {e}")
+        return f"Error expanding text: {e}"
