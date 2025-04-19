@@ -80,6 +80,8 @@ DEFAULT_MUSIC_LEVEL = 65  # Default volume percentage (0-100)
 # --- ElevenLabs Configuration ---
 DEFAULT_VOICE_LEVEL = 100  # Default volume percentage (0-100)
 VOICE_START_DELAY_MS = 3000  # Delay in milliseconds before voice starts
+POST_VOICE_SILENCE_MS = 2000  # Silence duration after voice ends before fade
+FADE_OUT_DURATION_MS = 3000  # Duration of the fade-out effect
 DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
 DEFAULT_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
 DEFAULT_VOICE_SETTINGS = {

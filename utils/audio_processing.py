@@ -175,74 +175,99 @@ def overlay_voice(
     base_audio_path: str, voice_audio_path: str, voice_level: int
 ) -> str | None:
     """
-    Overlays a voice track (with adjusted volume) onto a base audio track.
+    Overlays a voice track onto a base audio track, adds post-voice silence,
+    and applies a fade-out.
 
     Args:
-        base_audio_path: Path to the base audio file.
-        voice_audio_path: Path to the voice audio file.
+        base_audio_path: Path to the base audio file (timed to voice duration).
+        voice_audio_path: Path to the voice audio file (with potential start delay).
         voice_level: Volume level for the voice audio (0-100).
 
     Returns:
-        Path to the new temporary merged audio file, or None if an error occurs.
+        Path to the new temporary final audio file, or None if an error occurs.
     """
-    final_audio = None
+    audio_with_overlay = None
     try:
-        logging.info(f"Loading base audio for voice overlay: {base_audio_path}")
+        logging.info(f"Loading base audio for final overlay: {base_audio_path}")
         base_audio = AudioSegment.from_mp3(base_audio_path)
         base_duration_ms = len(base_audio)
-        logging.info(f"Base audio duration: {base_duration_ms / 1000:.2f} seconds")
+        logging.info(f"Base audio duration for overlay: {base_duration_ms / 1000:.2f}s")
 
-        logging.info(f"Loading voice audio for overlay: {voice_audio_path}")
+        logging.info(f"Loading voice audio for final overlay: {voice_audio_path}")
         voice_audio = AudioSegment.from_mp3(voice_audio_path)
-        voice_duration_ms = len(voice_audio)
-        logging.info(f"Voice audio duration: {voice_duration_ms / 1000:.2f} seconds")
+        voice_total_duration_ms = len(voice_audio)  # Includes leading silence
+        logging.info(
+            f"Voice audio total duration: {voice_total_duration_ms / 1000:.2f}s"
+        )
 
-        if voice_duration_ms == 0:
-            logging.warning(
-                "Voice audio has zero duration. Skipping overlay processing."
-            )
-            final_audio = base_audio  # Use base audio as is
+        if voice_total_duration_ms == 0:
+            logging.warning("Voice audio has zero duration. Using base audio directly.")
+            audio_with_overlay = base_audio
         else:
-            # --- Apply Voice Level ---
+            # Apply Voice Level
             voice_db_adjustment = level_to_db(voice_level)
             logging.info(
                 f"Adjusting voice volume by {voice_db_adjustment:.2f} dB (Level: {voice_level})"
             )
             adjusted_voice = voice_audio + voice_db_adjustment
-            # -----------------------
-
             voice_to_process = adjusted_voice
-            voice_duration_ms = len(voice_to_process)
-
-            if voice_duration_ms > base_duration_ms:
+            # Ensure voice isn't longer than base (safety check)
+            if len(voice_to_process) > base_duration_ms:
                 logging.warning(
-                    "Adjusted voice audio is longer than base audio. Truncating voice."
+                    "Adjusted voice audio is longer than base audio. Truncating voice to fit."
                 )
                 voice_to_overlay = voice_to_process[:base_duration_ms]
             else:
                 voice_to_overlay = voice_to_process
 
-            logging.info("Overlaying adjusted voice onto base audio.")
-            final_audio = base_audio.overlay(voice_to_overlay, position=0)
+            logging.info("Overlaying final adjusted voice onto base audio.")
+            audio_with_overlay = base_audio.overlay(voice_to_overlay, position=0)
 
-        # Export the final audio (either base or overlaid) to a new temporary file
-        if final_audio:
+        # --- Add Post-Voice Silence and Fade Out ---
+        current_duration_ms = len(audio_with_overlay)
+        target_end_silence_ms = config.POST_VOICE_SILENCE_MS
+        fade_duration_ms = config.FADE_OUT_DURATION_MS
+
+        # Calculate desired duration *before* fade
+        desired_duration_before_fade = base_duration_ms + target_end_silence_ms
+
+        # Extend with silence if needed to reach the point where fade should start
+        if current_duration_ms < desired_duration_before_fade:
+            silence_to_add = desired_duration_before_fade - current_duration_ms
+            logging.info(f"Adding {silence_to_add}ms of silence after overlay.")
+            audio_with_overlay += AudioSegment.silent(duration=silence_to_add)
+        elif current_duration_ms > desired_duration_before_fade:
+            # This shouldn't happen if base_audio was correctly timed, but good to handle
+            logging.warning(
+                f"Audio is longer ({current_duration_ms}ms) than expected before fade ({desired_duration_before_fade}ms). Truncating before fade."
+            )
+            audio_with_overlay = audio_with_overlay[:desired_duration_before_fade]
+
+        # Apply fade out
+        if fade_duration_ms > 0:
+            logging.info(f"Applying {fade_duration_ms}ms fade out.")
+            final_audio_with_fade = audio_with_overlay.fade_out(fade_duration_ms)
+        else:
+            final_audio_with_fade = audio_with_overlay  # No fade if duration is 0
+        # -------------------------------------------
+
+        # Export
+        if final_audio_with_fade:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_file:
                 final_filename = tmp_file.name
                 logging.info(
-                    f"Exporting final audio with voice overlay to: {final_filename}"
+                    f"Exporting final combined audio (duration: {len(final_audio_with_fade)/1000:.2f}s) to: {final_filename}"
                 )
-                final_audio.export(final_filename, format="mp3")
+                final_audio_with_fade.export(final_filename, format="mp3")
                 logging.info("Final audio export complete.")
                 return final_filename
         else:
-            # Should not happen if logic above is correct, but as a safeguard
             logging.error("Final audio object was unexpectedly None before export.")
             return None
 
     except FileNotFoundError as e:
-        logging.error(f"Audio file not found during voice overlay: {e}")
+        logging.error(f"Audio file not found during final overlay/fade: {e}")
         return None
     except Exception as e:
-        logging.error(f"An error occurred during voice overlay: {e}")
+        logging.error(f"An error occurred during final overlay/fade: {e}")
         return None
