@@ -2,6 +2,8 @@
 
 Create personalized wake-up alarms featuring a custom AI-generated voice message overlaid on your choice of background music and optional sound effects.
 
+![Example Usage](./example_usage.gif)
+
 ## Quick Start / Example Usage
 
 1.  **Clone the repository:**
