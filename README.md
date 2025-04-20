@@ -2,7 +2,7 @@
 
 Create personalized wake-up alarms featuring a custom AI-generated voice message overlaid on your choice of background music and optional sound effects.
 
-![Example Usage](./example_usage.gif)
+<img src="./example_usage.gif" alt="Example Usage" width="200"/>
 
 ## Quick Start / Example Usage
 
