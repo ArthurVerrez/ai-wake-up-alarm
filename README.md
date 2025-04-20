@@ -5,11 +5,7 @@ Create personalized wake-up alarms featuring a custom AI-generated voice message
 <img src="./example_usage.gif" alt="Example Usage" width="200"/>
 
 **Example Alarm Output:**
-<audio controls>
-
-  <source src="./example_alarm.mp3" type="audio/mpeg">
-  Your browser does not support the audio element.
-</audio>
+[Listen to Example Alarm](https://gabalpha.github.io/read-audio/?p=https://raw.githubusercontent.com/ArthurVerrez/ai-wake-up-alarm/main/example_alarm.mp3)
 
 ## Quick Start / Example Usage
 
