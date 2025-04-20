@@ -7,7 +7,7 @@ Create personalized wake-up alarms featuring a custom AI-generated voice message
 **Example Alarm Output:**
 <audio controls>
 
-  <source src="example_alarm.mp3" type="audio/mpeg">
+  <source src="./example_alarm.mp3" type="audio/mpeg">
   Your browser does not support the audio element.
 </audio>
 
