@@ -1,9 +1,11 @@
 import streamlit as st
 import config
-from utils.audio_processing import merge_audio, overlay_voice
+from utils.audio_processing import merge_audio, overlay_voice, level_to_db
 from utils.text_generation import generate_wake_up_message, expand_wake_up_message
 from utils.tts_generation import generate_openai_tts_audio
 import os
+import tempfile
+import logging
 from pydub import AudioSegment
 
 
@@ -260,11 +262,11 @@ def body():
 
     st.divider()
 
-    st.header("6. Generate Your Final Alarm")  # Renumbered
-    if st.button("Generate Alarm Sound", key="generate_button"):
-        # Clear previous result before generating new one
-        st.session_state["final_alarm_file_path"] = None
+    # --- Step 6: Generate Final Alarm ---
+    st.header("6. Generate Your Final Alarm")
 
+    if st.button("Generate Alarm Sound", key="generate_button"):
+        st.session_state["final_alarm_file_path"] = None
         # Get selections including new levels
         final_script = st.session_state.get(
             "generated_wake_up_text", config.DEFAULT_WAKE_UP_SCRIPT
@@ -286,10 +288,9 @@ def body():
         else:
             # --- Processing ---
             temp_files_to_clean = []
-            # final_alarm_path is now local to this block, will be stored in state
-            local_final_alarm_path = None
+            final_alarm_path = None  # This will be the final faded path
             error_occurred = False
-            target_duration = None
+            voice_duration = None  # Duration of TTS+delay
 
             # Map SFX names/levels to paths/levels for the processing function
             sfx_levels_paths = {
@@ -303,7 +304,7 @@ def body():
             ]
 
             try:
-                # 1. Generate TTS
+                # 1. Generate TTS and get its duration
                 generated_tts_path = None
                 with st.spinner("Generating voice audio using OpenAI..."):
                     generated_tts_path = generate_openai_tts_audio(
@@ -312,12 +313,11 @@ def body():
 
                     if generated_tts_path:
                         temp_files_to_clean.append(generated_tts_path)
-                        # --- Get TTS Duration ---
                         try:
                             tts_segment = AudioSegment.from_mp3(generated_tts_path)
-                            target_duration = len(tts_segment)
+                            voice_duration = len(tts_segment)
                             st.success(
-                                f"Voice audio generated (Duration: {target_duration / 1000:.2f}s)."
+                                f"Voice audio generated (Duration: {voice_duration / 1000:.2f}s)."
                             )
                         except Exception as e_dur:
                             st.error(
@@ -326,28 +326,35 @@ def body():
                             error_occurred = (
                                 True  # Treat as error if we can't get duration
                             )
-                        # ------------------------
                     else:
                         st.error("Failed to generate voice audio.")
                         error_occurred = True
 
-                # 2. Merge Music and SFX (using target_duration)
+                # 2. Calculate required background duration & Merge Music/SFX
                 merged_music_sfx_path = None
-                if (
-                    not error_occurred and target_duration is not None
-                ):  # Check if target_duration was set
+                if not error_occurred and voice_duration is not None:
+                    # Calculate total duration needed for background
+                    required_background_duration = (
+                        voice_duration
+                        + config.POST_VOICE_SILENCE_MS
+                        + config.FADE_OUT_DURATION_MS
+                    )
+                    logging.info(
+                        f"Calculated required background duration: {required_background_duration}ms"
+                    )
+
                     with st.spinner(
-                        f"Mixing background music and sound effects to match voice duration ({target_duration / 1000:.2f}s)..."
+                        f"Mixing background audio ({required_background_duration / 1000:.2f}s total)..."
                     ):
                         music_path = config.DEFAULT_MUSIC[selected_music_name]
-                        # Pass target_duration to merge_audio
+                        # Pass the calculated total duration
                         merged_music_sfx_path = merge_audio(
                             music_path,
                             sfx_paths_selected,
                             sfx_levels_paths,
                             music_level,
                             loop_sfx=True,
-                            target_duration_ms=target_duration,
+                            target_duration_ms=required_background_duration,
                         )
                         if merged_music_sfx_path:
                             temp_files_to_clean.append(merged_music_sfx_path)
@@ -355,30 +362,81 @@ def body():
                         else:
                             st.error("Failed to mix background audio.")
                             error_occurred = True
-                elif not error_occurred and target_duration is None:
+                elif not error_occurred and voice_duration is None:
                     st.error(
                         "Skipping background mix because voice duration could not be determined."
                     )
                     error_occurred = True  # Cannot proceed without target duration
 
-                # 3. Overlay Voice onto Merged Background (only if both above succeeded)
+                # 3. Overlay Voice
+                overlaid_audio_path = None  # Path before fade
                 if not error_occurred and generated_tts_path and merged_music_sfx_path:
                     with st.spinner("Overlaying voice onto background..."):
-                        # Assign to local variable first
-                        local_final_alarm_path = overlay_voice(
-                            merged_music_sfx_path, generated_tts_path, voice_level
+                        # Convert voice level (0-100) to dB adjustment
+                        voice_db_adjustment = level_to_db(voice_level)
+                        logging.info(
+                            f"Calculated voice dB adjustment: {voice_db_adjustment:.2f}dB for level {voice_level}"
                         )
-                        if local_final_alarm_path:
-                            temp_files_to_clean.append(local_final_alarm_path)
+
+                        overlaid_audio_path = overlay_voice(
+                            merged_music_sfx_path,
+                            generated_tts_path,
+                            voice_db_adjustment,  # Pass the dB value
+                        )
+                        if overlaid_audio_path:
+                            temp_files_to_clean.append(
+                                overlaid_audio_path
+                            )  # Clean this intermediate file too
                             st.success("Voice overlay complete.")
-                            # --- Store successful path in session state ---
-                            st.session_state["final_alarm_file_path"] = (
-                                local_final_alarm_path
-                            )
-                            # -----------------------------------------------
                         else:
                             st.error("Failed to overlay voice.")
                             error_occurred = True
+
+                # 4. Apply Fade Out
+                if not error_occurred and overlaid_audio_path:
+                    with st.spinner("Applying fade out..."):
+                        try:
+                            audio_to_fade = AudioSegment.from_mp3(overlaid_audio_path)
+                            fade_duration = config.FADE_OUT_DURATION_MS
+                            if fade_duration > 0 and fade_duration <= len(
+                                audio_to_fade
+                            ):
+                                faded_audio = audio_to_fade.fade_out(fade_duration)
+                                logging.info(f"Applied {fade_duration}ms fade out.")
+                            elif fade_duration > len(audio_to_fade):
+                                logging.warning(
+                                    f"Fade duration ({fade_duration}ms) longer than audio ({len(audio_to_fade)}ms). Applying fade over entire audio."
+                                )
+                                faded_audio = audio_to_fade.fade_out(len(audio_to_fade))
+                            else:
+                                logging.info("Fade duration is 0ms, skipping fade.")
+                                faded_audio = audio_to_fade  # No fade needed
+
+                            # Export the final faded audio to a new temp file
+                            with tempfile.NamedTemporaryFile(
+                                delete=False, suffix=".mp3"
+                            ) as tmp_file:
+                                final_alarm_path = (
+                                    tmp_file.name
+                                )  # This is the final path
+                                logging.info(
+                                    f"Exporting final faded audio to: {final_alarm_path}"
+                                )
+                                faded_audio.export(
+                                    final_alarm_path, format="mp3", bitrate="192k"
+                                )
+                                st.session_state["final_alarm_file_path"] = (
+                                    final_alarm_path  # Store final path
+                                )
+                                st.success("Fade out applied.")
+
+                        except Exception as e_fade:
+                            st.error(f"Failed to apply fade out: {e_fade}")
+                            logging.error(f"Error applying fade out: {e_fade}")
+                            error_occurred = True
+
+                # --- Display Result (Uses final_alarm_file_path from session state) ---
+                # (This block is now outside the button click)
 
             except Exception as e:
                 st.error(f"An unexpected error occurred during generation: {e}")
@@ -395,6 +453,7 @@ def body():
                                 f"Could not remove temporary file {file_path}: {e_rem}"
                             )
                 st.info("Cleanup complete.")
+                # --- End of Generate Button Logic ---
 
     # --- Display Final Result (Moved outside button logic) ---
     final_alarm_display_path = st.session_state.get("final_alarm_file_path")

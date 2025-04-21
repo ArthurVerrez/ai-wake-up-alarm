@@ -75,7 +75,7 @@ def generate_openai_tts_audio(text: str, voice_id: str) -> str | None:
             logging.info(
                 f"Saving OpenAI TTS audio with silence to temporary file: {output_filename}"
             )
-            final_tts_audio.export(output_filename, format="mp3")
+            final_tts_audio.export(output_filename, format="mp3", bitrate="192k")
             logging.info("OpenAI TTS audio with silence saved successfully.")
             return output_filename
 
