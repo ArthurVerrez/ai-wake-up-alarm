@@ -52,8 +52,8 @@ def generate_wake_up_message(user_description: str) -> str | None:
     {user_description}
 
     The message should be positive and encouraging for the day ahead.
-    Keep it concise, around 3-5 short sentences.
-    Example: "Hey... Heyyy... [Name]... time to wake up sleepyhead... 
+    Make it about 30 sentences long.
+    Example of a beginning message: "Hey... Heyyy... [Name]... time to wake up sleepyhead... 
     The sun is shining in [Location]... another day for [Activity/Job] awaits... 
     Come on now... rise and shine..."
 
