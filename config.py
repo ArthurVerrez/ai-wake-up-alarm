@@ -83,7 +83,7 @@ DEFAULT_VOICE_ID = "nova"
 DEFAULT_VOICE_LEVEL = 100
 VOICE_START_DELAY_MS = 3000
 POST_VOICE_SILENCE_MS = 2000
-FADE_OUT_DURATION_MS = 3000
+FADE_OUT_DURATION_MS = 5000
 
 # Detailed instructions for the TTS model (used with compatible models like gpt-4o-mini-tts)
 OPENAI_TTS_INSTRUCTIONS = """Voice Affect: Ultra-soft, whispery, and nurturing; project extreme calm and safety, like a warm cocoon. Every word should feel like it's gently wrapping around the listener.

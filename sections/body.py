@@ -20,6 +20,8 @@ def body():
     st.session_state.setdefault(
         "music_level", config.DEFAULT_MUSIC_LEVEL
     )  # Add music level state
+    # Add state for the final file path
+    st.session_state.setdefault("final_alarm_file_path", None)
 
     # --- Step 1: Create Message ---
     st.header("1. Create Your Wake-Up Message")
@@ -260,6 +262,9 @@ def body():
 
     st.header("6. Generate Your Final Alarm")  # Renumbered
     if st.button("Generate Alarm Sound", key="generate_button"):
+        # Clear previous result before generating new one
+        st.session_state["final_alarm_file_path"] = None
+
         # Get selections including new levels
         final_script = st.session_state.get(
             "generated_wake_up_text", config.DEFAULT_WAKE_UP_SCRIPT
@@ -281,7 +286,8 @@ def body():
         else:
             # --- Processing ---
             temp_files_to_clean = []
-            final_alarm_path = None
+            # final_alarm_path is now local to this block, will be stored in state
+            local_final_alarm_path = None
             error_occurred = False
             target_duration = None
 
@@ -358,36 +364,21 @@ def body():
                 # 3. Overlay Voice onto Merged Background (only if both above succeeded)
                 if not error_occurred and generated_tts_path and merged_music_sfx_path:
                     with st.spinner("Overlaying voice onto background..."):
-                        final_alarm_path = overlay_voice(
+                        # Assign to local variable first
+                        local_final_alarm_path = overlay_voice(
                             merged_music_sfx_path, generated_tts_path, voice_level
                         )
-                        if final_alarm_path:
-                            temp_files_to_clean.append(final_alarm_path)
+                        if local_final_alarm_path:
+                            temp_files_to_clean.append(local_final_alarm_path)
                             st.success("Voice overlay complete.")
+                            # --- Store successful path in session state ---
+                            st.session_state["final_alarm_file_path"] = (
+                                local_final_alarm_path
+                            )
+                            # -----------------------------------------------
                         else:
                             st.error("Failed to overlay voice.")
                             error_occurred = True
-
-                # --- Display Result ---
-                if final_alarm_path and not error_occurred:
-                    st.success("Your final alarm sound is ready!")
-                    st.audio(final_alarm_path, format="audio/mp3", start_time=0)
-                    # Add download button
-                    try:
-                        with open(final_alarm_path, "rb") as fp:
-                            btn = st.download_button(
-                                label="Download Final Alarm",
-                                data=fp,
-                                file_name=f"final_alarm_{selected_music_name.replace(' ', '_')}.mp3",
-                                mime="audio/mp3",
-                            )
-                    except Exception as e:
-                        st.error(f"Error preparing download: {e}")
-                else:
-                    # Error message was already shown in the respective step
-                    st.error(
-                        "Alarm generation failed. Please check the steps above and logs."
-                    )
 
             except Exception as e:
                 st.error(f"An unexpected error occurred during generation: {e}")
@@ -404,3 +395,35 @@ def body():
                                 f"Could not remove temporary file {file_path}: {e_rem}"
                             )
                 st.info("Cleanup complete.")
+
+    # --- Display Final Result (Moved outside button logic) ---
+    final_alarm_display_path = st.session_state.get("final_alarm_file_path")
+    # Check if path exists in state AND the file still exists on disk
+    if final_alarm_display_path and os.path.exists(final_alarm_display_path):
+        st.success("Your final alarm sound is ready!")
+        st.audio(final_alarm_display_path, format="audio/mp3", start_time=0)
+
+        # Get music name for filename (handle if selection changed before download)
+        music_name_for_dl = st.session_state.get("music_select", "custom_alarm")
+        dl_filename = f"final_alarm_{music_name_for_dl.replace(' ', '_')}.mp3"
+
+        try:
+            with open(final_alarm_display_path, "rb") as fp:
+                st.download_button(
+                    label="Download Final Alarm",
+                    data=fp,
+                    file_name=dl_filename,
+                    mime="audio/mp3",
+                    key="download_final_button",  # Added a key
+                )
+        except Exception as e:
+            st.error(
+                f"Error preparing download: {e}. File path: {final_alarm_display_path}"
+            )
+    elif st.session_state.get("final_alarm_file_path"):
+        # If path is in state but file doesn't exist (likely cleaned up)
+        st.info(
+            "Generated alarm file no longer available. Please generate again to download."
+        )
+        # Optionally clear the state path here if desired
+        # st.session_state['final_alarm_file_path'] = None
