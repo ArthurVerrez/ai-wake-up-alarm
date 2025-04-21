@@ -2,7 +2,7 @@ import streamlit as st
 import config
 from utils.audio_processing import merge_audio, overlay_voice
 from utils.text_generation import generate_wake_up_message, expand_wake_up_message
-from utils.tts_generation import generate_tts_audio
+from utils.tts_generation import generate_openai_tts_audio
 import os
 from pydub import AudioSegment
 
@@ -12,10 +12,7 @@ def body():
 
     # Initialize session state
     st.session_state.setdefault("generated_wake_up_text", config.DEFAULT_WAKE_UP_SCRIPT)
-    st.session_state.setdefault(
-        "selected_voice_id",
-        config.ELEVENLABS_VOICES[0]["id"] if config.ELEVENLABS_VOICES else None,
-    )
+    st.session_state.setdefault("selected_voice_id", config.DEFAULT_VOICE_ID)
     st.session_state.setdefault("sfx_levels", {})
     st.session_state.setdefault(
         "voice_level", config.DEFAULT_VOICE_LEVEL
@@ -88,33 +85,45 @@ def body():
     # --- NEW SECTION: Voice Selection ---
     st.header("2. Select Voice")
 
+    # Use OPENAI_VOICES from config
     voice_options = {
         voice["id"]: f"{voice['name']} ({voice['description']})"
-        for voice in config.ELEVENLABS_VOICES
+        for voice in config.OPENAI_VOICES
     }
+
+    # Ensure default exists in options, or default to first if available
+    default_index = 0
+    if config.DEFAULT_VOICE_ID in voice_options:
+        default_index = list(voice_options.keys()).index(config.DEFAULT_VOICE_ID)
+    elif voice_options:
+        st.session_state["selected_voice_id"] = list(voice_options.keys())[0]
+    else:  # No voices configured
+        st.session_state["selected_voice_id"] = None
 
     # Function to update selected voice ID in session state
     def update_selected_voice():
         st.session_state.selected_voice_id = st.session_state.voice_select_key
 
-    selected_voice_id = st.selectbox(
+    selected_voice_id_from_state = st.session_state.get("selected_voice_id")
+
+    st.selectbox(
         "Choose a voice for your message:",
         options=list(voice_options.keys()),
         format_func=lambda voice_id: voice_options.get(voice_id, "Unknown Voice"),
-        key="voice_select_key",  # Use a distinct key
+        key="voice_select_key",
         index=(
-            list(voice_options.keys()).index(st.session_state.selected_voice_id)
-            if st.session_state.selected_voice_id in voice_options
-            else 0
+            list(voice_options.keys()).index(selected_voice_id_from_state)
+            if selected_voice_id_from_state in voice_options
+            else default_index
         ),
-        on_change=update_selected_voice,  # Update state on change
+        on_change=update_selected_voice,
     )
 
     # Find the full details of the selected voice
     selected_voice_details = next(
         (
             v
-            for v in config.ELEVENLABS_VOICES
+            for v in config.OPENAI_VOICES
             if v["id"] == st.session_state.selected_voice_id
         ),
         None,
@@ -124,23 +133,22 @@ def body():
         st.write(
             f"**Previewing:** {selected_voice_details['name']} - *{selected_voice_details['description']}*"
         )
-        # Check if preview file exists before trying to play
         if os.path.exists(selected_voice_details["preview_file"]):
             st.audio(
                 selected_voice_details["preview_file"], format="audio/mp3", start_time=0
             )
         else:
             st.warning(
-                f"Preview audio not found for {selected_voice_details['name']} at {selected_voice_details['preview_file']}"
+                f"Preview audio for OpenAI voice '{selected_voice_details['name']}' not found at {selected_voice_details['preview_file']}. Previews need to be created manually."
             )
-    else:
+    elif voice_options:  # Only error if voices exist but selection failed
         st.error("Selected voice details not found. Please check configuration.")
 
     with st.expander("Preview all available voices"):
-        if not config.ELEVENLABS_VOICES:
+        if not config.OPENAI_VOICES:
             st.write("No voices configured.")
         else:
-            for voice in config.ELEVENLABS_VOICES:
+            for voice in config.OPENAI_VOICES:
                 st.write(f"**{voice['name']}**: {voice['description']}")
                 if os.path.exists(voice["preview_file"]):
                     st.audio(voice["preview_file"], format="audio/mp3", start_time=0)
@@ -291,22 +299,11 @@ def body():
             try:
                 # 1. Generate TTS
                 generated_tts_path = None
-                with st.spinner("Generating voice audio..."):
-                    voice_details = next(
-                        (
-                            v
-                            for v in config.ELEVENLABS_VOICES
-                            if v["id"] == selected_voice_id
-                        ),
-                        None,
+                with st.spinner("Generating voice audio using OpenAI..."):
+                    generated_tts_path = generate_openai_tts_audio(
+                        final_script, selected_voice_id
                     )
-                    voice_settings = (
-                        voice_details.get("voice_settings") if voice_details else None
-                    )  # Use specific or default settings
 
-                    generated_tts_path = generate_tts_audio(
-                        final_script, selected_voice_id, voice_settings
-                    )
                     if generated_tts_path:
                         temp_files_to_clean.append(generated_tts_path)
                         # --- Get TTS Duration ---

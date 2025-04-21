@@ -77,52 +77,42 @@ DEFAULT_SFX_LEVEL = 75  # Default volume percentage (0-100)
 # --- Music Configuration ---
 DEFAULT_MUSIC_LEVEL = 65  # Default volume percentage (0-100)
 
-# --- ElevenLabs Configuration ---
-DEFAULT_VOICE_LEVEL = 100  # Default volume percentage (0-100)
-VOICE_START_DELAY_MS = 3000  # Delay in milliseconds before voice starts
-POST_VOICE_SILENCE_MS = 2000  # Silence duration after voice ends before fade
-FADE_OUT_DURATION_MS = 3000  # Duration of the fade-out effect
-DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
-DEFAULT_ELEVENLABS_OUTPUT_FORMAT = "mp3_44100_128"
-DEFAULT_VOICE_SETTINGS = {
-    "stability": 0.50,
-    "similarity_boost": 0.95,
-    "style": 0.5,
-    "use_speaker_boost": True,
-    "speed": 0.9,  # Default speed
-}
+# --- OpenAI TTS Configuration ---
+OPENAI_TTS_MODEL_ID = "gpt-4o-mini-tts"  # Supports instructions
+DEFAULT_VOICE_ID = "nova"
+DEFAULT_VOICE_LEVEL = 100
+VOICE_START_DELAY_MS = 3000
+POST_VOICE_SILENCE_MS = 2000
+FADE_OUT_DURATION_MS = 3000
 
-ELEVENLABS_VOICES = [
+# Detailed instructions for the TTS model (used with compatible models like gpt-4o-mini-tts)
+OPENAI_TTS_INSTRUCTIONS = """Voice Affect: Ultra-soft, whispery, and nurturing; project extreme calm and safety, like a warm cocoon. Every word should feel like it's gently wrapping around the listener.
+
+Tone: Subtly melodic and deeply reassuring, with a delicate British accent. Speak just above a murmur — never sharp, never rushed. Let the voice feel like it's gliding.
+
+Pacing: Exceptionally slow and spacious; prioritize comfort over efficiency. Each sentence should have time to settle, inviting the listener to stay in the moment.
+
+Emotion: Quietly affectionate, peaceful, and intimate — as if softly waking someone you love. Radiate gentle encouragement without urgency.
+
+Pronunciation: Softened articulation; enunciate with breathy precision. Let important words like "calm," "safe," "ready," and "gently" land like feathers.
+
+Pauses: Long, intentional silences between lines to allow the listener's awareness to drift into wakefulness. Use silence as part of the comfort."""
+
+# Define available OpenAI voices
+# (IDs must match OpenAI's 'voice' parameter options: alloy, echo, fable, onyx, nova, shimmer)
+OPENAI_VOICES = [
     {
-        # https://elevenlabs.io/app/voice-lab?voiceId=FA6HhUjVbervLw2rNl8M
-        "id": "FA6HhUjVbervLw2rNl8M",
-        "name": "Ophelia Rose",
-        "description": "British Female, Soothing & Calm",
-        "preview_file": "static/voices/FA6HhUjVbervLw2rNl8M.mp3",
-        "voice_settings": DEFAULT_VOICE_SETTINGS,
+        "id": "nova",
+        "name": "Nova",
+        "description": "Female, Gentle & Soothing",
+        "preview_file": "static/voices/nova_preview.mp3",
     },
     {
-        # https://elevenlabs.io/app/voice-lab?voiceId=FA6HhUjVbervLw2rNl8M
-        "id": "KmnvDXRA0HU55Q0aqkPG",
-        "name": "Australian Baritone",
-        "description": "Soft, Slow & Calming",
-        "preview_file": "static/voices/KmnvDXRA0HU55Q0aqkPG.mp3",
-        "voice_settings": DEFAULT_VOICE_SETTINGS,
+        "id": "onyx",
+        "name": "Onyx",
+        "description": "Male, Deep & Calming",
+        "preview_file": "static/voices/onyx_preview.mp3",
     },
-    # Add more voices here in the future, ensuring preview files exist
-    # Example for a future voice with custom settings:
-    # {
-    #     "id": "ANOTHER_VOICE_ID",
-    #     "name": "Future Voice",
-    #     "description": "Another description",
-    #     "preview_file": "static/voices/ANOTHER_VOICE_ID.mp3",
-    #     "voice_settings": {
-    #         "stability": 0.60, # Custom setting
-    #         "similarity_boost": 0.90,
-    #         "style": 0.3,
-    #         "use_speaker_boost": False,
-    #         "speed": 1.0,
-    #     }
-    # },
+    # Add other voices (alloy, echo, fable, shimmer) here if desired
 ]
-# Ensure the 'static/voices/' directory exists and contains the preview MP3s named by ID.
+# Ensure the 'static/voices/' directory exists. Preview files need to be created manually.
