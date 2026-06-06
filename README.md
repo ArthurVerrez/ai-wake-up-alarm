@@ -31,7 +31,6 @@ Create personalized wake-up alarms featuring a custom AI-generated voice message
     - Add your API keys (OpenAI key is used for both text and speech):
       ```dotenv
       OPENAI_API_KEY="your_openai_api_key_here"
-      # ELEVENLABS_API_KEY="your_elevenlabs_api_key_here" # No longer needed
       ```
 4.  **Run the Streamlit app:**
     ```bash
